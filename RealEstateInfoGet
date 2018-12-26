@@ -1,0 +1,29 @@
+import requests as req
+xq_xishanlinyu = "http://esf.fang.com/house/c61-kw%b1%a3%c0%fb%ce%f7%c9%bd%c1%d6%d3%ef/"
+res = req.get(xq_xishanlinyu)
+
+from bs4 import BeautifulSoup
+soup = BeautifulSoup(res.text, "html.parser")
+houses = soup.select(".shop_list dl")
+
+def getHouseInfo(url):
+    info = {}
+    soup = BeautifulSoup(req.get(url).text, "html.parser")
+    res = soup.select(".tab-cont-right .trl-item1")
+    for re in res:
+        tmp = re.text.strip().split('\n')
+        info[tmp[1].strip()] = tmp[0].strip()
+        
+    xiaoqu = soup.select(".rcont .blue")[0].text
+    info["小区名称"] = xiaoqu
+    zongjia = soup.select(".tab-cont-right .trl-item")
+    info["总价"] = zongjia[0].text
+    print(info)
+
+domain = "http://esf.fang.com"
+for house in houses:
+    try:
+        url = domain+house.select(".clearfix a")[0]['href']
+        getHouseInfo(url)
+    except Exception as e:
+        print("---------->", e)
