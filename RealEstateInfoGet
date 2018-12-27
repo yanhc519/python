@@ -1,10 +1,11 @@
+import time
+import pandas as pd
 import requests as req
-xq_xishanlinyu = "http://esf.fang.com/house/c61-kw%b1%a3%c0%fb%ce%f7%c9%bd%c1%d6%d3%ef/"
-res = req.get(xq_xishanlinyu)
-
 from bs4 import BeautifulSoup
-soup = BeautifulSoup(res.text, "html.parser")
-houses = soup.select(".shop_list dl")
+
+domain = "http://esf.fang.com/"
+subdomain = "house/"
+searchkey = "kw%b1%a3%c0%fb%ce%f7%c9%bd%c1%d6%d3%ef/"
 
 def getHouseInfo(url):
     info = {}
@@ -12,18 +13,52 @@ def getHouseInfo(url):
     res = soup.select(".tab-cont-right .trl-item1")
     for re in res:
         tmp = re.text.strip().split('\n')
-        info[tmp[1].strip()] = tmp[0].strip()
+        name = tmp[1].strip()
+        if("朝向" in name):
+            name = name.strip("进门")
+        if("楼层" in name):
+            name = name[0:2]
+        if("地上层数" in name):
+            name = "楼层"
+        if("装修程度" in name):
+            name = "装修"
+        info[name] = tmp[0].strip();
         
     xiaoqu = soup.select(".rcont .blue")[0].text
     info["小区名称"] = xiaoqu
     zongjia = soup.select(".tab-cont-right .trl-item")
     info["总价"] = zongjia[0].text
-    print(info)
+    return info
+    
+def pageFun(i):
+    if i == "1":
+        page_url = domain + subdomain + searchkey
+    else:
+        page_url = domain + subdomain + "i3" + i + "-" + searchkey
+    res = req.get(page_url)
+    soup = BeautifulSoup(res.text, "html.parser")
+    houses = soup.select(".shop_list dl")
+    page_info_list = []
+    for house in houses:
+        try:
+            url = domain+house.select(".clearfix a")[0]['href']
+            info = getHouseInfo(url)
+            page_info_list.append(info)
+            time.sleep(0.5)
+        except Exception as e:
+            print("---------->", e)
+    df = pd.DataFrame(page_info_list)
+    return df
 
-domain = "http://esf.fang.com"
-for house in houses:
+df = pd.DataFrame()
+name_prefix = "houseinfo_"
+for i in range(1,3):
     try:
-        url = domain+house.select(".clearfix a")[0]['href']
-        getHouseInfo(url)
+        df_a = pageFun(str(i))
+        df = df_a.append(df)
+        print(df.size, df_a.size)
     except Exception as e:
-        print("---------->", e)
+        print("Exception:", e)
+    if(i % 2 == 0):
+        df.to_csv(name_prefix+str(i)+".csv", encoding='utf_8_sig')
+        df = pd.DataFrame()
