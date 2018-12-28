@@ -6,3 +6,5 @@
 可能会用到数据库sql
 
 主要参考教程：http://edu.51cto.com//center/course/lesson/index?id=221816
+
+链家有反爬虫机制，不能直接request，需要作为http请求获取页面
