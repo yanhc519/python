@@ -3,6 +3,9 @@ import urllib.request
 import pandas as pd
 from bs4 import BeautifulSoup
 
+domain = "https://bj.lianjia.com/ershoufang/"
+searchkey = "rs%E8%A5%BF%E5%B1%B1%E6%9E%97%E8%AF%AD/"
+
 def download(url):
     try:
         html = urllib.request.urlopen(url).read()
@@ -36,8 +39,6 @@ def getHouseInfo(url):
     return info
 
 def pageFun(i):
-    domain = "https://bj.lianjia.com/ershoufang/"
-    searchkey = "rs%E8%A5%BF%E5%B1%B1%E6%9E%97%E8%AF%AD/"
     if i == "1":
         page_url = domain + searchkey
     else:
@@ -59,15 +60,22 @@ def pageFun(i):
     df = pd.DataFrame(page_info_list)
     return df
 
+#获得总页数
+soup = BeautifulSoup(download(domain + searchkey), "html.parser")
+res = soup.select(".page-box")
+string = str(res[0])
+index = string.index("totalPage") + len("totalPage") + 2
+pagenum = int(string[index]) + 1
+
 df = pd.DataFrame()
 name_prefix = "houseinfo_"
-for i in range(1,4):
+for i in range(1,pagenum):
     try:
         df_a = pageFun(str(i))
         df = df_a.append(df)
         print(df.size, df_a.size)
     except Exception as e:
         print("Exception:", e)
-    if(i % 3 == 0):
+    if(i == (pagenum - 1)):
         df.to_csv(name_prefix+str(i)+".csv", encoding='utf_8_sig')
         df = pd.DataFrame()
