@@ -4,6 +4,8 @@ import datetime as dt
 import urllib.request
 import pandas as pd
 from bs4 import BeautifulSoup
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 
 domain = "https://bj.lianjia.com/ershoufang/"
 
@@ -23,6 +25,9 @@ def getHouseInfo(url):
     info["小区"] = res[0].text.strip()
     res = soup.select(".houseInfo .room .mainInfo")
     info["户型"] = res[0].text.strip()
+    if(info["户型"] == "车位"):
+        return
+    info["居数"] = res[0].text.strip()[0]
     res = soup.select(".houseInfo .room .subInfo")
     info["楼层"] = res[0].text.strip()
     res = soup.select(".houseInfo .type .mainInfo")
@@ -34,7 +39,7 @@ def getHouseInfo(url):
     res = soup.select(".houseInfo .area .subInfo")
     info["建造时间"] = res[0].text.strip()
     res = soup.select(".content .price .unitPrice")
-    info["单价"] = res[0].text.strip()
+    info["单价"] = res[0].text.strip().strip("元/平米")
     res = soup.select(".content .price .total")
     info["总价"] = res[0].text.strip()
     return info
@@ -44,7 +49,6 @@ def pageFun(i, searchkey):
         page_url = domain + searchkey
     else:
         page_url = domain + "pg" + i + searchkey
-    print("page" + i)
     soup = BeautifulSoup(download(page_url), "html.parser")
     houses = soup.select(".sellListContent li")
     page_info_list = []
@@ -52,9 +56,10 @@ def pageFun(i, searchkey):
         try:
             #获取每个房源方框的超链接
             url = house.select(".title a")[0]['href']
-            print(url)
+            print(".", end='')
             info = getHouseInfo(url)
-            page_info_list.append(info)
+            if(info != None):
+                page_info_list.append(info)
             time.sleep(0.5)
         except Exception as e:
             print("---------->", e)
@@ -72,17 +77,19 @@ def getXiaoqu(xqname, searchkey):
     df = pd.DataFrame()
     
     name_prefix = "fangjia/" +str(dt.date.today())+"/"+xqname
+    print("page num: "+str(pagenum-1))
     for i in range(1,pagenum):
         try:
+            print("page" + str(i), end='')
             df_a = pageFun(str(i), searchkey)
-            print(df_a)
             df = df_a.append(df)
             print(df.size, df_a.size)
         except Exception as e:
             print("Exception:", e)
-        if(i == (pagenum - 1)):
-            df.to_csv(name_prefix+"-"+str(i)+"-"+str(dt.date.today())+".csv", encoding='utf_8_sig')
-            df = pd.DataFrame()
+            
+    df.to_csv(name_prefix+"-pagenum"+str(i)+"-"+str(dt.date.today())+".csv", encoding='utf_8_sig')
+    return df
+
 
 ################################################################
 list_xqname = ['xishanlinyu', 
@@ -98,11 +105,40 @@ list_xqcode = ['rs%E8%A5%BF%E5%B1%B1%E6%9E%97%E8%AF%AD/',
             'rs%E8%9E%8D%E6%B3%BD%E5%98%89%E5%9B%AD/', 
             'rs%E9%BE%99%E5%8D%9A%E8%8B%91%E4%B8%89%E5%8C%BA/']
 
+#创建日期文件夹
 if(not os.path.exists("fangjia/"+str(dt.date.today()))):
     print("creat date directory")
     os.mkdir("fangjia/"+str(dt.date.today()))
-    
+
+#遍历所有小区，本想自动创建价格汇总文件的，没找到读取空csv的方法...
 for idx in range(1,len(list_xqname)+1):
     idx = idx-1
     print(list_xqname[idx])
-    getXiaoqu(list_xqname[idx], list_xqcode[idx])
+
+    filepath = "fangjia/"+list_xqname[idx]+".csv"
+    dfrd = pd.read_csv(filepath, encoding='utf_8_sig', index_col=0, error_bad_lines=False) #index_col=0可以不读取索引，不出现unamed
+    #判断今天的结果是否在文件中
+    print(dt.date.today())
+    date = str(dt.date.today())
+    if(date in dfrd.columns):
+        print("Today data is exist, quit run!")
+        plt.plot(dfrd.loc[0,:], 'r*-')
+        plt.title(list_xqname[idx]+" all room average price")
+        plt.show()
+    else:
+        print("no exist, start crawler")
+        #获取今天的数据
+        df = getXiaoqu(list_xqname[idx], list_xqcode[idx])
+        print(df.size)
+        df["单价"] = df["单价"].astype("int") #价格默认为Object格式，修改为int，用于计算均值
+        df["居数"] = df["居数"].astype("int")
+        price = df["单价"].mean()
+        SeriesToday = df.groupby("居数")["单价"].mean() #以“居数”分组，然后，求“单价”列的平均值，结果为Series类型
+        insert = pd.Series([price], index=[0])
+        SeriesToday = SeriesToday.append(insert, ignore_index=False) #添加总价到Series中
+        dfrd[date] = SeriesToday
+        dfrd.to_csv(filepath, encoding='utf_8_sig')
+
+        plt.plot(dfrd.loc[0,:], 'r*-')
+        plt.title(list_xqname[idx]+" all room average price")
+        plt.show()
