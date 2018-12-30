@@ -1,0 +1,130 @@
+import os
+import time
+import datetime as dt
+import urllib.request
+import pandas as pd
+from bs4 import BeautifulSoup
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+domain = "https://bj.lianjia.com/ershoufang/"
+
+def download(url):
+    try:
+        html = urllib.request.urlopen(url).read()
+    except Exception as e:
+        print("Exception:", e)
+        html = None
+    return html
+
+#每一个房源页面信息提取
+def getHouseInfo(url):
+    info = {}
+    soup = BeautifulSoup(download(url), "html.parser")
+    res = soup.select(".aroundInfo .communityName .info")
+    info["小区"] = res[0].text.strip()
+    res = soup.select(".houseInfo .room .mainInfo")
+    info["户型"] = res[0].text.strip()
+    if(info["户型"] == "车位"):
+        return
+    info["居数"] = res[0].text.strip()[0]
+    res = soup.select(".houseInfo .room .subInfo")
+    info["楼层"] = res[0].text.strip()
+    res = soup.select(".houseInfo .type .mainInfo")
+    info["朝向"] = res[0].text.strip()
+    res = soup.select(".houseInfo .type .subInfo")
+    info["装修"] = res[0].text.strip()
+    res = soup.select(".houseInfo .area .mainInfo")
+    info["面积"] = res[0].text.strip()
+    res = soup.select(".houseInfo .area .subInfo")
+    info["建造时间"] = res[0].text.strip()
+    res = soup.select(".content .price .unitPrice")
+    info["单价"] = res[0].text.strip().strip("元/平米")
+    res = soup.select(".content .price .total")
+    info["总价"] = res[0].text.strip()
+    return info
+
+def pageFun(i, searchkey):
+    if i == "1":
+        page_url = domain + searchkey
+    else:
+        page_url = domain + "pg" + i + searchkey
+    soup = BeautifulSoup(download(page_url), "html.parser")
+    houses = soup.select(".sellListContent li")
+    page_info_list = []
+    for house in houses:
+        try:
+            #获取每个房源方框的超链接
+            url = house.select(".title a")[0]['href']
+            print(".", end='')
+            info = getHouseInfo(url)
+            if(info != None):
+                page_info_list.append(info)
+            time.sleep(0.5)
+        except Exception as e:
+            print("---------->", e)
+    df = pd.DataFrame(page_info_list)
+    return df
+
+def getXiaoqu(xqname, searchkey):
+    #获得总页数
+    soup = BeautifulSoup(download(domain + searchkey), "html.parser")
+    res = soup.select(".page-box")
+    string = str(res[0])
+    index = string.index("totalPage") + len("totalPage") + 2
+    pagenum = int(string[index]) + 1
+
+    df = pd.DataFrame()
+    
+    name_prefix = "fangjia/" +str(dt.date.today())+"/"+xqname
+    print("page num: "+str(pagenum-1))
+    for i in range(1,pagenum):
+        try:
+            print("page" + str(i), end='')
+            df_a = pageFun(str(i), searchkey)
+            df = df_a.append(df)
+            print(df.size, df_a.size)
+        except Exception as e:
+            print("Exception:", e)
+            
+    df.to_csv(name_prefix+"-pagenum"+str(i)+"-"+str(dt.date.today())+".csv", encoding='utf_8_sig')
+    return df
+
+
+################################################################
+list_xqname = ['xishanlinyu', 
+            'baiwangfu', 
+            'beijingrenjia', 
+            'lingxiuhuigu', 
+            'rongzejiayuan', 
+            'longboyuan3qu']
+list_xqcode = ['rs%E8%A5%BF%E5%B1%B1%E6%9E%97%E8%AF%AD/', 
+            'rs%E5%86%A0%E5%9F%8E%E5%A4%A7%E9%80%9A%E7%99%BE%E6%97%BA%E5%BA%9C/', 
+            'rs%E5%8C%97%E4%BA%AC%E4%BA%BA%E5%AE%B6/', 
+            'rs%E9%A2%86%E8%A2%96%E6%85%A7%E8%B0%B7/', 
+            'rs%E8%9E%8D%E6%B3%BD%E5%98%89%E5%9B%AD/', 
+            'rs%E9%BE%99%E5%8D%9A%E8%8B%91%E4%B8%89%E5%8C%BA/']
+
+#创建日期文件夹
+if(not os.path.exists("fangjia/"+str(dt.date.today()))):
+    print("creat date directory")
+    os.mkdir("fangjia/"+str(dt.date.today()))
+
+#遍历所有小区，这部分代码创建一个过去某天的价格
+for idx in range(1,len(list_xqname)+1):
+#for idx in range(5,6):
+    idx = idx-1
+    print(list_xqname[idx])
+    
+    df = getXiaoqu(list_xqname[idx], list_xqcode[idx])
+    print(df.size)
+    df["单价"] = df["单价"].astype("int") #价格默认为Object格式，修改为int，用于计算均值
+    price = df["单价"].mean()
+    series = df.groupby("居数")["单价"].mean() #以“居数”分组，然后，求“单价”列的平均值，结果为Series类型
+    insert = pd.Series([price], index=['0'])
+    series = series.append(insert, ignore_index=False) #添加总价到Series中
+    #print(series)
+    dftotal = pd.DataFrame()
+    dftotal['2018-12-29'] = series
+    #print(dftotal)
+    dftotal.to_csv("fangjia/"+list_xqname[idx]+".csv", encoding='utf_8_sig')
