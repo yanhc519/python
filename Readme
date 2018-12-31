@@ -20,6 +20,8 @@ pandas能否根据列值不同，而筛选出某些行呢，再求均值呢，�
 将均价保存在另一个csv文件中
 按日期分不同列
 
+用jupyter notebook运行
+
 需要先运行HousePriceGet_lianjia_init，初始化各小区的过去某天均价，作为初始均价，因为读取空的csv文件方法没找到。
 
 每次运行，先读取小区均价csv文件，
